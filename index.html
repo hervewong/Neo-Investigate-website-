@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>CyberForge · Infos d’un site</title>
+<style>
+:root{--bg:#0b1220;--card:#131c2e;--fg:#e8eef7;--mut:#8a97ab;--ac:#36d6c4;--wa:#ffa726;color-scheme:dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.w{max-width:900px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:6px 0}h1 span{color:var(--ac)}
+.sub{color:var(--mut);font-size:13px;margin-bottom:14px}
+input{width:100%;padding:14px;border-radius:10px;border:1px solid #33425c;background:#0e1626;color:var(--fg);font-size:16px}
+button,a.btn{display:inline-block;padding:12px 16px;border-radius:999px;border:0;font-size:15px;font-weight:600;cursor:pointer;text-decoration:none;text-align:center}
+.pri{background:var(--ac);color:#06201c;width:100%;margin-top:10px}
+.out{background:transparent;border:1px solid var(--ac)!important;color:var(--ac)}
+.card{background:var(--card);border-radius:14px;padding:14px 16px;margin-top:14px}
+h3{margin:0 0 8px;font-size:14px;letter-spacing:.5px}
+.row{display:flex;gap:10px;padding:7px 0;border-top:1px solid #1e2a40;font-size:14px}
+.row:first-of-type{border-top:0}
+.row .k{flex:0 0 120px;color:var(--mut)}.row .v{flex:1;word-break:break-word}
+.ok{color:var(--ac)}.wn{color:var(--wa)}
+.tag{display:inline-block;background:#1b2a44;border-radius:999px;padding:3px 10px;margin:2px;font-size:12px}
+.note{color:var(--mut);font-size:12px;margin-top:8px}
+.tools{display:flex;flex-wrap:wrap;gap:8px}
+pre{white-space:pre-wrap;word-break:break-word;font-size:12px;color:var(--mut);margin:4px 0}
+.warn{background:#2a2410;border:1px solid #6b5a1c;color:#ffd866;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:12px}
+</style>
+</head>
+<body>
+<div class="w">
+<h1>🌐 <span>CyberForge</span> · Infos d’un site</h1>
+<div class="sub">Récupère les informations publiques d’un site ou d’une URL : DNS, IP, propriétaire du domaine, technologies, sous-domaines, fichiers publics.</div>
+<div class="warn">Outil passif : il lit uniquement des informations publiques. Aucun scan de ports, aucune attaque. Utilise-le sur des sites qui t’appartiennent ou pour de la simple curiosité légale.</div>
+<input id="u" type="url" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="exemple.com ou https://exemple.com/page">
+<button class="pri" id="go">🔍 Analyser</button>
+<div id="out"></div>
+<div id="end"></div>
+</div>
+<script>
+var $=function(i){return document.getElementById(i)};
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function row(k,v,cls){return '<div class="row"><div class="k">'+k+'</div><div class="v '+(cls||'')+'">'+v+'</div></div>'}
+function sec(t){var d=document.createElement('div');d.className='card';d.innerHTML='<h3>'+t+'</h3><div class="b">Chargement…</div>';$('out').appendChild(d);return d.querySelector('.b')}
+function tags(a,n){a=a.slice(0,n||40);return a.length?a.map(function(x){return '<span class="tag">'+esc(x)+'</span>'}).join(''):'aucun'}
+function reg(h){var p=h.split('.');if(p.length<=2)return h;var two=p.slice(-2).join('.');return ['co.uk','com.au','co.jp','com.br','co.nz','co.za','com.mx','org.uk','gov.uk','ac.uk','com.tr','com.cn'].indexOf(two)>=0?p.slice(-3).join('.'):two}
+async function jget(u,opt){var r=await fetch(u,opt);if(!r.ok)throw new Error(r.status);return r.json()}
+async function doh(n,t){try{var j=await jget('https://cloudflare-dns.com/dns-query?name='+encodeURIComponent(n)+'&type='+t,{headers:{accept:'application/dns-json'}});return j.Answer||[]}catch(e){}try{var j2=await jget('https://dns.google/resolve?name='+encodeURIComponent(n)+'&type='+t);return j2.Answer||[]}catch(e){return null}}
+async function prox(u){var l=['https://api.allorigins.win/raw?url=','https://corsproxy.io/?'];for(var i=0;i<l.length;i++){try{var r=await fetch(l[i]+encodeURIComponent(u));if(r.ok)return await r.text()}catch(e){}}return null}
+function clean(d){return String(d).replace(/^"|"$/g,'').replace(/"\s+"/g,'')}
+
+$('go').onclick=async function(){
+  var raw=$('u').value.trim();if(!raw)return;
+  var url;try{url=new URL(/^https?:\/\//i.test(raw)?raw:'https://'+raw)}catch(e){$('out').innerHTML='<div class="card wn">URL invalide.</div>';return}
+  $('out').innerHTML='';$('end').innerHTML='';$('go').disabled=true;
+  var host=url.hostname.toLowerCase(),dom=reg(host),ips=[],subs=[],rob='',b;
+
+  b=sec('🔗 URL');
+  b.innerHTML=row('Protocole',esc(url.protocol.replace(':','')),url.protocol=='https:'?'ok':'wn')+row('Hôte',esc(host))+row('Domaine',esc(dom))+row('Port',esc(url.port||(url.protocol=='https:'?'443 (par défaut)':'80 (par défaut)')))+row('Chemin',esc(url.pathname))+row('Paramètres',esc(url.search||'aucun'));
+
+  b=sec('🧭 DNS');
+  try{
+    var T=['A','AAAA','CNAME','MX','NS','TXT','CAA'],res=await Promise.all(T.map(function(t){return doh(host,t)})),h='',txt=[];
+    T.forEach(function(t,i){var a=res[i];if(a===null){h+=row(t,'indisponible','wn');return}var v=a.filter(function(x){return x.type!=5||t=='CNAME'}).map(function(x){return clean(x.data)});if(t=='A')ips=a.filter(function(x){return x.type==1}).map(function(x){return x.data});if(t=='TXT')txt=v;h+=row(t,v.length?v.map(esc).join('<br>'):'<span style="color:#8a97ab">aucun</span>')});
+    b.innerHTML=h;
+    var b2=sec('✉️ Sécurité e-mail (SPF / DMARC)'),dm=await doh('_dmarc.'+dom,'TXT'),spf=txt.filter(function(x){return /^v=spf1/i.test(x)}),dmt=(dm||[]).map(function(x){return clean(x.data)}).filter(function(x){return /^v=DMARC1/i.test(x)});
+    b2.innerHTML=row('SPF',spf.length?esc(spf[0]):'absent',spf.length?'ok':'wn')+row('DMARC',dmt.length?esc(dmt[0]):'absent',dmt.length?'ok':'wn')+'<div class="note">Un domaine sans SPF ni DMARC peut être usurpé plus facilement dans des e-mails frauduleux.</div>';
+  }catch(e){b.innerHTML='DNS indisponible.'}
+
+  b=sec('📍 Adresse IP et hébergeur');
+  if(!ips.length){b.innerHTML='Aucune adresse IPv4 trouvée.'}else{
+    try{var j=await jget('https://ipwho.is/'+ips[0]);if(j.success===false)throw 0;b.innerHTML=row('IP',esc(ips[0]))+row('Pays',esc((j.flag&&j.flag.emoji||'')+' '+(j.country||'?')))+row('Région / ville',esc((j.region||'')+' · '+(j.city||'')))+row('Fournisseur',esc(j.connection&&j.connection.isp||'?'))+row('Organisation',esc(j.connection&&j.connection.org||'?'))+row('ASN',esc(j.connection&&j.connection.asn||'?'))+row('Fuseau',esc(j.timezone&&j.timezone.id||'?'))+(ips.length>1?row('Autres IP',esc(ips.slice(1).join(', '))):'')}catch(e){b.innerHTML=row('IP',esc(ips.join(', ')))+'<div class="note">Détails de localisation indisponibles.</div>'}}
+
+  b=sec('📇 Propriétaire du domaine (RDAP)');
+  try{
+    var r=await jget('https://rdap.org/domain/'+dom,{headers:{accept:'application/rdap+json'}}),ev=function(n){var e=(r.events||[]).find(function(x){return x.eventAction==n});return e?new Date(e.eventDate).toLocaleDateString('fr-FR'):'?'},rg='?';
+    (r.entities||[]).forEach(function(en){if((en.roles||[]).indexOf('registrar')>=0&&en.vcardArray){var f=en.vcardArray[1].find(function(x){return x[0]=='fn'});if(f)rg=f[3]}});
+    var exp=(r.events||[]).find(function(x){return x.eventAction=='expiration'}),soon=exp&&(new Date(exp.eventDate)-new Date())<30*864e5;
+    b.innerHTML=row('Bureau d’enregistrement',esc(rg))+row('Créé le',ev('registration'))+row('Expire le',ev('expiration'),soon?'wn':'')+row('Modifié le',ev('last changed'))+row('Statut',esc((r.status||[]).join(', ')||'?'))+row('Serveurs DNS',esc((r.nameservers||[]).map(function(n){return n.ldhName}).join(', ')||'?'))+'<div class="note">Les noms des propriétaires sont souvent masqués (protection de la vie privée).</div>';
+  }catch(e){b.innerHTML='Informations RDAP indisponibles pour ce domaine.'}
+
+  b=sec('🌿 Sous-domaines connus (certificats publics)');
+  try{
+    var c=await jget('https://crt.sh/?q=%25.'+encodeURIComponent(dom)+'&output=json'),s={};c.forEach(function(x){String(x.name_value).split('\n').forEach(function(n){n=n.trim().toLowerCase();if(n&&n.indexOf('*')<0)s[n]=1})});
+    var l=Object.keys(s).sort();subs=l;var lc=c.slice().sort(function(a,b2){return new Date(b2.not_after)-new Date(a.not_after)})[0];b.innerHTML=row('Trouvés',l.length)+(lc?row('Dernier certificat',esc((lc.issuer_name||'?').replace(/.*O=/,'').replace(/,.*/,''))+' · expire le '+new Date(lc.not_after).toLocaleDateString('fr-FR')):'')+'<div>'+tags(l,60)+'</div>';
+  }catch(e){b.innerHTML='crt.sh n’a pas répondu (service parfois saturé ou bloqué). Utilise le bouton crt.sh plus bas.'}
+
+  b=sec('🧬 Page et technologies');
+  var html=await prox(url.href);
+  if(html===null){b.innerHTML='Impossible de lire la page (le site bloque la lecture ou le service relais est indisponible).'}else{
+    var d=new DOMParser().parseFromString(html,'text/html'),m=function(n){var e=d.querySelector('meta[name="'+n+'"],meta[property="'+n+'"]');return e?e.content:''},
+    sg=[['WordPress',/wp-content|wp-includes/i],['Joomla',/\/media\/jui\/|joomla/i],['Drupal',/drupal/i],['Shopify',/cdn\.shopify\.com/i],['Wix',/wixstatic|wix\.com/i],['Squarespace',/squarespace/i],['Next.js',/__NEXT_DATA__|_next\//],['React',/data-reactroot|react(\.min)?\.js/i],['Vue.js',/vue(\.min)?\.js|data-v-/i],['Angular',/ng-version|angular/i],['jQuery',/jquery/i],['Bootstrap',/bootstrap/i],['Tailwind CSS',/tailwind/i],['Google Analytics',/google-analytics|gtag\(/i],['Google Tag Manager',/googletagmanager/i],['Matomo',/matomo|piwik/i],['Cloudflare',/cdn-cgi/i],['Stripe',/js\.stripe\.com/i],['Font Awesome',/fontawesome/i],['Google Fonts',/fonts\.googleapis/i]],
+    tech=sg.filter(function(x){return x[1].test(html)}).map(function(x){return x[0]}),dm={},lk=0;
+    d.querySelectorAll('[href],[src],[action]').forEach(function(e){var v=e.getAttribute('href')||e.getAttribute('src')||e.getAttribute('action');try{var h2=new URL(v,url.href).hostname;if(h2&&h2!=host)dm[h2]=1}catch(e){}});
+    var em=Array.from(new Set(html.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g)||[])).filter(function(x){return !/\.(png|jpg|svg|gif|webp)$/i.test(x)}),
+    cm=[],w=document.createTreeWalker(d,128),x;while(x=w.nextNode()){var t=x.nodeValue.trim();if(t)cm.push(t.slice(0,80))}
+    var fm=Array.from(d.forms).map(function(f){return (f.method||'get').toUpperCase()+' '+(f.getAttribute('action')||'(même page)')}),
+    soc=Array.from(new Set(Array.from(d.querySelectorAll('a[href]')).map(function(a){return a.href}).filter(function(h){return /facebook\.com|twitter\.com|x\.com|instagram\.com|linkedin\.com|youtube\.com|tiktok\.com|github\.com/i.test(h)})));
+    b.innerHTML=row('Titre',esc(d.title||'(aucun)'))+row('Description',esc(m('description')||'(aucune)'))+row('Générateur',esc(m('generator')||'non indiqué'))+row('Langue',esc(d.documentElement.lang||'?'))+row('Technologies','<div>'+tags(tech)+'</div>')+row('Domaines externes','<div>'+tags(Object.keys(dm).sort(),30)+'</div>')+row('Formulaires',esc(fm.join(' · ')||'aucun'))+row('Champ mot de passe',d.querySelector('input[type=password]')?'présent':'aucun')+row('E-mails visibles','<div>'+tags(em,15)+'</div>')+row('Réseaux sociaux','<div>'+tags(soc,10)+'</div>')+row('Commentaires HTML',esc(cm.slice(0,3).join(' | ')||'aucun'))+row('Taille du HTML',Math.round(html.length/1024)+' Ko')+'<div class="note">Détection par signatures dans le code de la page : indicative, pas garantie.</div>';
+  }
+
+  b=sec('📄 Fichiers publics');
+  var base=url.origin,fl=[['/robots.txt','robots.txt'],['/sitemap.xml','sitemap.xml'],['/.well-known/security.txt','security.txt']],h3='';
+  for(var i=0;i<fl.length;i++){var tx=await prox(base+fl[i][0]);var ok=tx&&!/^\s*</.test(tx)||(tx&&fl[i][0]=='/sitemap.xml'&&/<urlset|<sitemapindex/i.test(tx));if(ok&&i==0)rob=tx;h3+=row(fl[i][1],ok?'présent':'non trouvé',ok?'ok':'')+(ok?'<pre>'+esc(tx.slice(0,350))+'</pre>':'')}
+  b.innerHTML=h3;
+
+
+  b=sec('📡 DNS avancé et messagerie');
+  try{
+    var q=await Promise.all([doh(dom,'SOA'),doh(dom,'DS'),doh(dom,'MX'),doh('_mta-sts.'+dom,'TXT'),doh('default._bimi.'+dom,'TXT')]),
+    ptr=ips.length?await doh(ips[0].split('.').reverse().join('.')+'.in-addr.arpa','PTR'):[],
+    dk=await Promise.all(['google','default','selector1','selector2','k1','s1','mail'].map(function(s5){return doh(s5+'._domainkey.'+dom,'TXT').then(function(a){return (a&&a.length)?s5:null})})),
+    g=function(a){return (a||[]).map(function(x){return clean(x.data)})},
+    mx=g(q[2]).join(),prov=/google|gmail/i.test(mx)?'Google Workspace':/outlook/i.test(mx)?'Microsoft 365':/proton/i.test(mx)?'Proton Mail':/ovh/i.test(mx)?'OVH':/zoho/i.test(mx)?'Zoho':/mimecast/i.test(mx)?'Mimecast':mx?'Autre ou auto-hébergé':'aucune';
+    b.innerHTML=row('SOA',esc(g(q[0])[0]||'?'))+row('DNSSEC',q[1]&&q[1].length?'activé (DS présent)':'non activé',q[1]&&q[1].length?'ok':'wn')+row('DNS inverse (PTR)',esc(g(ptr).join(', ')||'aucun'))+row('Messagerie',esc(prov))+row('MTA-STS',g(q[3]).length?'présent':'absent',g(q[3]).length?'ok':'wn')+row('BIMI',g(q[4]).length?'présent':'absent')+row('Sélecteurs DKIM',esc(dk.filter(Boolean).join(', ')||'aucun trouvé (sélecteurs courants testés)'));
+  }catch(e){b.innerHTML='Indisponible.'}
+
+  b=sec('🛰️ Réseau de l’IP (RDAP)');
+  if(!ips.length){b.innerHTML='Pas d’IP.'}else{try{var ri=await jget('https://rdap.org/ip/'+ips[0],{headers:{accept:'application/rdap+json'}}),ab='?';(ri.entities||[]).forEach(function(en){if(en.vcardArray){var em2=en.vcardArray[1].find(function(x){return x[0]=='email'});if(em2&&(en.roles||[]).indexOf('abuse')>=0)ab=em2[3]}});var cd=(ri.cidr0_cidrs||[]).map(function(c3){return (c3.v4prefix||c3.v6prefix)+'/'+c3.length}).join(', ');b.innerHTML=row('Réseau',esc(ri.name||'?'))+row('Plage',esc(ri.startAddress+' → '+ri.endAddress))+row('CIDR',esc(cd||'?'))+row('Pays',esc(ri.country||'?'))+row('Contact abus',esc(ab))}catch(e){b.innerHTML='RDAP de l’IP indisponible.'}}
+
+  b=sec('🕰️ Archives du site (Wayback Machine)');
+  try{var f1=await jget('https://web.archive.org/cdx/search/cdx?url='+encodeURIComponent(host)+'&output=json&limit=1'),f2=await jget('https://web.archive.org/cdx/search/cdx?url='+encodeURIComponent(host)+'&output=json&limit=-1'),fd=function(a){if(!a||a.length<2)return 'aucune';var t=a[1][0];return t.slice(6,8)+'/'+t.slice(4,6)+'/'+t.slice(0,4)};b.innerHTML=row('Première archive',fd(f1))+row('Dernière archive',fd(f2))}catch(e){b.innerHTML='Aucune archive trouvée, ou service indisponible.'}
+
+  b=sec('🗺️ Chemins cités dans robots.txt');
+  var dis=[],smp=[];rob.split(/\r?\n/).forEach(function(ln){var m1=ln.match(/^\s*disallow:\s*(\S+)/i),m2=ln.match(/^\s*sitemap:\s*(\S+)/i);if(m1)dis.push(m1[1]);if(m2)smp.push(m2[1])});
+  b.innerHTML=rob?row('Chemins exclus','<div>'+tags(Array.from(new Set(dis)),40)+'</div>')+row('Sitemaps','<div>'+tags(smp,10)+'</div>')+'<div class="note">Ces chemins sont publics. Un robots.txt n’est pas une protection.</div>':'Pas de robots.txt lisible.';
+
+  b=sec('🌿 Sous-domaines résolus');
+  if(!subs.length){b.innerHTML='Aucun sous-domaine connu.'}else{var sl=subs.filter(function(x){return x!=host}).slice(0,15),sr=await Promise.all(sl.map(function(n){return doh(n,'A')}));b.innerHTML=sl.map(function(n,i){var a=(sr[i]||[]).filter(function(x){return x.type==1}).map(function(x){return x.data});return row(esc(n),a.length?esc(a.join(', ')):'ne répond pas (DNS)',a.length?'':'wn')}).join('')+(subs.length>16?'<div class="note">15 premiers sous-domaines testés sur '+subs.length+'.</div>':'')}
+
+  b=sec('🎭 Domaines ressemblants (anti-hameçonnage)');
+  try{var lb=dom.split('.')[0],tl=dom.slice(lb.length),vs={},hm={o:'0',l:'1',i:'l',e:'3',a:'4',s:'5'};for(var j2=0;j2<lb.length;j2++){vs[lb.slice(0,j2)+lb.slice(j2+1)]=1;vs[lb.slice(0,j2)+lb[j2]+lb.slice(j2)]=1;if(j2<lb.length-1)vs[lb.slice(0,j2)+lb[j2+1]+lb[j2]+lb.slice(j2+2)]=1;if(hm[lb[j2]])vs[lb.slice(0,j2)+hm[lb[j2]]+lb.slice(j2+1)]=1}delete vs[lb];var cand=Object.keys(vs).filter(function(x){return x.length>1&&!/^-|-$/.test(x)}).slice(0,24).map(function(x){return x+tl});['.com','.net','.org','.fr','.co'].forEach(function(t){if(tl!=t)cand.push(lb+t)});var lr=await Promise.all(cand.map(function(n){return doh(n,'A')})),hit=cand.filter(function(n,i){return lr[i]&&lr[i].some(function(x){return x.type==1})});b.innerHTML=row('Variantes testées',cand.length)+row('Qui répondent','<div>'+tags(hit)+'</div>',hit.length?'wn':'')+'<div class="note">Un domaine qui répond n’est pas forcément malveillant : à vérifier (propriétaire, contenu).</div>'}catch(e){b.innerHTML='Indisponible.'}
+
+  b=sec('📑 Détails de la page');
+  if(typeof d==='undefined'||!d){b.innerHTML='Page non lue.'}else{var sc=Array.from(d.querySelectorAll('script[src]')).map(function(s2){return s2.getAttribute('src')}),mt=Array.from(d.querySelectorAll('meta[property^="og:"],meta[name="twitter:card"],meta[name="robots"],meta[name="viewport"]')).map(function(x){return (x.getAttribute('property')||x.name)+' = '+(x.content||'').slice(0,60)}),ints=Array.from(d.querySelectorAll('a[href]')).map(function(a){return a.getAttribute('href')}).filter(function(hh){return hh&&(hh[0]=='/'||hh.indexOf(host)>=0)});b.innerHTML=row('Scripts ('+sc.length+')','<pre>'+esc(sc.slice(0,15).join('\n')||'aucun')+'</pre>')+row('Liens internes',ints.length)+row('Balises meta','<pre>'+esc(mt.slice(0,12).join('\n')||'aucune')+'</pre>')+row('Données structurées',d.querySelector('script[type="application/ld+json"]')?'JSON-LD présent':'aucune')+row('Iframes',d.querySelectorAll('iframe').length)}
+
+  b=sec('🔧 Aller plus loin (ouvre un site externe)');
+  var e1=encodeURIComponent(url.href),e2=encodeURIComponent(dom);
+  var L=[['En-têtes de sécurité','https://securityheaders.com/?q='+e1+'&followRedirects=on'],['Certificat TLS (SSL Labs)','https://www.ssllabs.com/ssltest/analyze.html?d='+encodeURIComponent(host)],['Historique (Wayback)','https://web.archive.org/web/*/'+url.href],['Sous-domaines (crt.sh)','https://crt.sh/?q=%25.'+e2],['Réputation (VirusTotal)','https://www.virustotal.com/gui/domain/'+e2],['Analyse (urlscan.io)','https://urlscan.io/search/#'+e2]];
+  if(ips.length)L.push(['Shodan (IP)','https://www.shodan.io/host/'+ips[0]],['Censys (IP)','https://search.censys.io/hosts/'+ips[0]]);L.push(['BuiltWith','https://builtwith.com/'+dom],['SecurityTrails','https://securitytrails.com/domain/'+dom+'/dns'],['Pages indexées (Google)','https://www.google.com/search?q=site:'+dom],['Documents publics (Google)','https://www.google.com/search?q=site:'+dom+'+filetype:pdf']);
+  b.innerHTML='<div class="tools">'+L.map(function(x){return '<a class="btn out" target="_blank" rel="noopener noreferrer" href="'+esc(x[1])+'">'+x[0]+'</a>'}).join('')+'</div><div class="note">Les en-têtes HTTP et la note du certificat ne peuvent pas être lus depuis un navigateur : ces services le font pour toi.</div>';
+
+  $('end').innerHTML='<button class="pri out" id="cp" style="margin-top:14px">📋 Copier le rapport</button>';
+  $('cp').onclick=function(){try{navigator.clipboard.writeText('RAPPORT CYBERFORGE · '+url.href+'\n\n'+$('out').innerText);$('cp').textContent='✔ Copié'}catch(e){$('cp').textContent='Copie impossible'}};
+  $('go').disabled=false;
+};
+$('u').addEventListener('keydown',function(e){if(e.key==='Enter')$('go').click()});
+</script>
+</body>
+</html>
